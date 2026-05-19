@@ -102,14 +102,19 @@ function buildServer() {
   );
 
   server.tool("update_business",
-    "Update/enrich an existing company record in GHL. Only provided fields are changed.",
+    "Update/enrich an existing company record in GHL. Only provided fields are changed. For referral_company_type use customFieldKey='business.referral_company_type' with a value like 'Plumber', 'Realtor', 'Insurance Agent', 'HVAC Contractor', 'Property Manager', 'Adjuster', 'General Contractor', 'Restoration Company', 'Pest Control'.",
     { business_id: z.string(), name: z.string().optional(), phone: z.string().optional(),
       email: z.string().optional(), website: z.string().optional(), address: z.string().optional(),
       city: z.string().optional(), state: z.string().optional(), postalCode: z.string().optional(),
-      description: z.string().optional() },
-    async ({ business_id, ...fields }) => {
+      description: z.string().optional(),
+      customFieldKey: z.string().optional().describe("Custom field key e.g. business.referral_company_type"),
+      customFieldValue: z.string().optional().describe("Value to set for the custom field") },
+    async ({ business_id, customFieldKey, customFieldValue, ...fields }) => {
       const payload = {};
       for (const [k, v] of Object.entries(fields)) if (v !== undefined) payload[k] = v;
+      if (customFieldKey && customFieldValue !== undefined) {
+        payload.customFields = [{ key: customFieldKey, field_value: customFieldValue }];
+      }
       const data = await ghl("PUT", `/businesses/${business_id}`, payload);
       return ok(data.business || data);
     }
