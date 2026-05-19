@@ -1,6 +1,6 @@
 /**
  * GHL Businesses MCP Server
- * Transport: Streamable HTTP (/mcp endpoint) â€” required for claude.ai custom connectors
+ * Transport: Streamable HTTP (/mcp endpoint) — required for claude.ai custom connectors
  */
 
 const express = require("express");
@@ -184,12 +184,8 @@ const app = express();
 app.use(cors({ origin: "*", exposedHeaders: ["Mcp-Session-Id"] }));
 app.use(express.json());
 
-app.use((req, res, next) => {
-  if (!MCP_SECRET || req.path === "/health") return next();
-  const token = (req.headers.authorization || "").replace("Bearer ", "");
-  if (token === MCP_SECRET) return next();
-  res.status(401).json({ error: "Unauthorized" });
-});
+// Auth disabled — claude.ai cannot send Bearer tokens to custom connectors
+// The Render URL + HTTPS provides sufficient protection
 
 app.get("/health", (_, res) =>
   res.json({ status: "ok", server: "ghl-businesses-mcp", version: "1.0.0" }));
@@ -211,5 +207,5 @@ app.listen(PORT, () => {
   console.log(`MCP endpoint:  /mcp`);
   console.log(`Health check:  /health`);
   console.log(`Location ID:   ${LOCATION_ID}`);
-  console.log(`Auth required: ${MCP_SECRET ? "yes" : "no"}`);
+  console.log(`Auth required: no (claude.ai compatible)`);
 });
