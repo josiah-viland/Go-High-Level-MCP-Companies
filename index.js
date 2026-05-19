@@ -113,7 +113,8 @@ function buildServer() {
       const payload = {};
       for (const [k, v] of Object.entries(fields)) if (v !== undefined) payload[k] = v;
       if (customFieldKey && customFieldValue !== undefined) {
-        payload.customFields = [{ key: customFieldKey, field_value: customFieldValue }];
+        // GHL businesses API expects customFields as key-value object
+        payload.customFields = { [customFieldKey]: customFieldValue };
       }
       const data = await ghl("PUT", `/businesses/${business_id}`, payload);
       return ok(data.business || data);
