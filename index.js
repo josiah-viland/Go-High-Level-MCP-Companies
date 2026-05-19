@@ -183,6 +183,168 @@ function buildServer() {
     }
   );
 
+  // ── get_contact_notes ──────────────────────────────────────────────────
+  server.tool("get_contact_notes",
+    "Get all notes for a specific GHL contact",
+    { contact_id: z.string(), limit: z.number().optional(), skip: z.number().optional() },
+    async ({ contact_id, limit = 100, skip = 0 }) => {
+      const p = new URLSearchParams({ limit, skip });
+      const data = await ghl("GET", `/contacts/${contact_id}/notes?${p}`);
+      const notes = data.notes || [];
+      return ok({ total: data.total || notes.length,
+        notes: notes.map(n => ({ id: n.id, body: n.body, dateAdded: n.dateAdded, createdBy: n.userId })) });
+    }
+  );
+
+  // ── get_contact_tasks ──────────────────────────────────────────────────
+  server.tool("get_contact_tasks",
+    "Get all tasks for a specific GHL contact",
+    { contact_id: z.string() },
+    async ({ contact_id }) => {
+      const data = await ghl("GET", `/contacts/${contact_id}/tasks`);
+      return ok({ tasks: data.tasks || [] });
+    }
+  );
+
+  // ── get_contact_appointments ───────────────────────────────────────────
+  server.tool("get_contact_appointments",
+    "Get all appointments/calendar events for a specific GHL contact",
+    { contact_id: z.string() },
+    async ({ contact_id }) => {
+      const data = await ghl("GET", `/contacts/${contact_id}/appointments`);
+      return ok({ appointments: data.events || data.appointments || [] });
+    }
+  );
+
+  // ── get_contact_activity ───────────────────────────────────────────────
+  server.tool("get_contact_activity",
+    "Get full activity feed for a contact including calls, emails, SMS, notes, and other events",
+    { contact_id: z.string(), limit: z.number().optional(), skip: z.number().optional() },
+    async ({ contact_id, limit = 100, skip = 0 }) => {
+      const p = new URLSearchParams({ limit, skip });
+      const data = await ghl("GET", `/contacts/${contact_id}/activity?${p}`);
+      return ok(data);
+    }
+  );
+
+  // ── get_conversations ──────────────────────────────────────────────────
+  server.tool("get_conversations",
+    "Get all conversations (SMS, email, calls) for a specific GHL contact",
+    { contact_id: z.string() },
+    async ({ contact_id }) => {
+      const p = new URLSearchParams({ locationId: LOCATION_ID, contactId: contact_id, limit: 20 });
+      const data = await ghl("GET", `/conversations/search?${p}`);
+      const convos = data.conversations || [];
+      return ok({ total: data.total || convos.length, conversations: convos.map(c => ({
+        id: c.id, type: c.type, lastMessage: c.lastMessage,
+        lastMessageDate: c.lastMessageDate, unreadCount: c.unreadCount,
+        assignedTo: c.assignedTo
+      }))});
+    }
+  );
+
+  // ── get_conversation_messages ─────────────────────────────────────────
+  server.tool("get_conversation_messages",
+    "Get all messages in a specific conversation (SMS, email, calls, etc.)",
+    { conversation_id: z.string(), limit: z.number().optional() },
+    async ({ conversation_id, limit = 100 }) => {
+      const p = new URLSearchParams({ limit });
+      const data = await ghl("GET", `/conversations/${conversation_id}/messages?${p}`);
+      const messages = data.messages || data.lastMessageBody || [];
+      return ok({ total: data.total, messages });
+    }
+  );
+
+  // ── get_contact_full_profile ───────────────────────────────────────────
+  server.tool("get_contact_full_profile",
+    "Get complete contact profile including all custom fields, tags, and metadata. Use this for reporting and summaries.",
+    { contact_id: z.string() },
+    async ({ contact_id }) => {
+      const data = await ghl("GET", `/contacts/${contact_id}`);
+      const c = data.contact || data;
+      return ok({
+        id: c.id, name: `${c.firstName||""} ${c.lastName||""}`.trim(),
+        email: c.email, phone: c.phone, companyName: c.companyName,
+        address: c.address1, city: c.city, state: c.state, postalCode: c.postalCode,
+        tags: c.tags, source: c.source, type: c.type,
+        assignedTo: c.assignedTo, businessId: c.businessId,
+        dateAdded: c.dateAdded, dateUpdated: c.dateUpdated,
+        customFields: c.customFields || [],
+        additionalEmails: c.additionalEmails || [],
+        website: c.website, dnd: c.dnd,
+      });
+    }
+  );
+
+  // ── get_opportunities ─────────────────────────────────────────────────
+  server.tool("get_opportunities",
+    "Get all opportunities in GHL. Can filter by contact, pipeline, or status. Use for sales reporting.",
+    { contact_id: z.string().optional(), pipeline_id: z.string().optional(),
+      status: z.enum(["open","won","lost","abandoned","all"]).optional(),
+      limit: z.number().optional(), page: z.number().optional() },
+    async ({ contact_id, pipeline_id, status = "all", limit = 100, page = 1 }) => {
+      const p = new URLSearchParams({ location_id: LOCATION_ID, limit, page, status });
+      if (contact_id)  p.set("contact_id", contact_id);
+      if (pipeline_id) p.set("pipeline_id", pipeline_id);
+      const data = await ghl("GET", `/opportunities/search?${p}`);
+      const opps = data.opportunities || [];
+      return ok({ total: data.total || opps.length, page,
+        opportunities: opps.map(o => ({
+          id: o.id, name: o.name, status: o.status,
+          monetaryValue: o.monetaryValue, pipelineId: o.pipelineId,
+          pipelineStageId: o.pipelineStageId, pipelineStageName: o.pipelineStage?.name,
+          assignedTo: o.assignedTo?.name, contactName: o.contact?.name,
+          dateAdded: o.dateAdded, dateUpdated: o.updatedAt,
+          customFields: o.customFields || [],
+        }))});
+    }
+  );
+
+  // ── get_pipelines ─────────────────────────────────────────────────────
+  server.tool("get_pipelines",
+    "Get all sales pipelines and their stages in GHL",
+    {},
+    async () => {
+      const data = await ghl("GET", `/opportunities/pipelines?locationId=${LOCATION_ID}`);
+      return ok(data);
+    }
+  );
+
+  // ── get_custom_fields ─────────────────────────────────────────────────
+  server.tool("get_custom_fields",
+    "Get all custom field definitions for contacts in GHL — shows field IDs, names, keys, and allowed values",
+    { model: z.enum(["contact","opportunity","all"]).optional() },
+    async ({ model = "contact" }) => {
+      const data = await ghl("GET", `/locations/${LOCATION_ID}/customFields?model=${model}`);
+      return ok(data);
+    }
+  );
+
+  // ── search_contacts ────────────────────────────────────────────────────
+  server.tool("search_contacts",
+    "Search GHL contacts by name, email, phone, or company name. Returns full profiles for reporting.",
+    { query: z.string(), limit: z.number().optional(), page: z.number().optional() },
+    async ({ query, limit = 20, page = 1 }) => {
+      const data = await ghl("POST", "/contacts/search", {
+        locationId: LOCATION_ID, page, pageLimit: limit,
+        filters: [], sort: [{ field: "dateAdded", direction: "desc" }],
+        searchAfter: query ? undefined : undefined,
+      });
+      // GHL search doesn't filter by query in POST, use GET for name search
+      const p = new URLSearchParams({ locationId: LOCATION_ID, query, limit });
+      const data2 = await ghl("GET", `/contacts/?${p}`);
+      const contacts = data2.contacts || [];
+      return ok({ total: data2.meta?.total || contacts.length,
+        contacts: contacts.map(c => ({
+          id: c.id, name: `${c.firstName||""} ${c.lastName||""}`.trim(),
+          email: c.email, phone: c.phone, companyName: c.companyName,
+          tags: c.tags, businessId: c.businessId,
+          customFields: c.customFields || [],
+          dateAdded: c.dateAdded,
+        }))});
+    }
+  );
+
   return server;
 }
 
